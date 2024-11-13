@@ -30,6 +30,8 @@ video_config = camera.create_video_configuration(
 camera.configure(photo_config)
 camera.start()
 
+print("program start")
+
 leds = [23, 24]
 for led in leds: 
 	GPIO.setmode(GPIO.BCM)
@@ -49,6 +51,8 @@ def blinking(led, sleep):
 
 def capturing():
 	global camera_capture
+	print("capturing")
+ 
 	filename = SAVE_FOLDER_IMG + '//' + str(time.strftime("%Y-%m-%d %H:%M:%S")) + ".jpg"
 			
 	GPIO.output(leds[1], GPIO.HIGH)
@@ -94,6 +98,7 @@ def shutdown():
 GPIO.add_event_detect(tabs[1], GPIO.FALLING, callback=handle_stop, bouncetime=200)	
 	
 while True:
+	print("program working")
 	if GPIO.input(tabs[0]) == GPIO.LOW:
 		if is_streaming:
 			camera.stop_recording()
