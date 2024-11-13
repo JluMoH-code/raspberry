@@ -1,22 +1,34 @@
-from FrameCapture import PiCamera2Capture
+from libcamera import Transform, controls
 from picamera2 import Picamera2
+from picamera2.encoders import H264Encoder, Quality
 import RPi.GPIO as GPIO
 import time
 import cv2
+import subprocess
 
 TIME_CAPTURING = 0
-TIME_STEP = 3
+TIME_STEP = 2
 TIME_BLINK = 1
 TIME_SHUTDOWN = 5
-SAVE_FOLDER_IMG = '/home/user/code/camera/imgs'
-SAVE_FOLDER_VIDEO = '/home/user/code/camera/videos'
-SIZE = (1920, 1080)
+SAVE_FOLDER_IMG = '/home/Lincos/code/camera/imgs'
+SAVE_FOLDER_VIDEO = '/home/Lincos/code/camera/videos'
+PHOTO_SIZE = (3840, 2160)
+VIDEO_SIZE = (1920, 1080)
 
 is_capturing = False
 is_streaming = False
-output = None
 
-camera_capture = PiCamera2Capture(mode=2, form="video", size=SIZE)
+camera = Picamera2()
+photo_config = camera.create_still_configuration(
+    main={"size": PHOTO_SIZE, "format": 'RGB888'},
+    controls={"AfMode": controls.AfModeEnum.Continuous, "AfSpeed": controls.AfSpeedEnum.Fast}
+)
+video_config = camera.create_video_configuration(
+    main={"size": VIDEO_SIZE, "format": 'RGB888'},  
+    controls={"FrameRate": 30, "AfMode": controls.AfModeEnum.Continuous, "AfSpeed": controls.AfSpeedEnum.Fast}
+)
+camera.configure(photo_config)
+camera.start()
 
 leds = [23, 24]
 for led in leds: 
@@ -35,65 +47,72 @@ def blinking(led, sleep):
 	GPIO.output(led, GPIO.LOW)
 	time.sleep(sleep)
 
-for i in range(4):
-	blinking(leds[0], TIME_BLINK)
-
 def capturing():
+	global camera_capture
 	filename = SAVE_FOLDER_IMG + '//' + str(time.strftime("%Y-%m-%d %H:%M:%S")) + ".jpg"
-	
+			
 	GPIO.output(leds[1], GPIO.HIGH)
-	camera_capture.capture_file(filename)
+	camera.capture_file(filename)
 	print(f"save: {filename}")
 	time.sleep(TIME_BLINK)
 	GPIO.output(leds[1], GPIO.LOW)
 	
 	time.sleep(TIME_STEP - TIME_BLINK)
 	
+def start_streaming():
+	camera.switch_mode(video_config)
+	video_path = SAVE_FOLDER_VIDEO + "//" + str(time.strftime("%Y-%m-%d %H:%M:%S")) + ".h264"
+	encoder = H264Encoder(bitrate=12000000)
+	camera.start_recording(encoder, video_path, quality=Quality.HIGH)
+	GPIO.output(leds[0], GPIO.LOW)
+	GPIO.output(leds[1], GPIO.HIGH)
+	while is_streaming:
+		time.sleep(1)
+		
+def stop():
+	global is_streaming, is_capturing
+	if is_streaming:
+		camera.stop_recording()
+		is_streaming = False
+	is_capturing = False
+	GPIO.output(leds[1], GPIO.LOW)
+	
+def handle_stop(channel):
+	stop()
+
 def shutdown():
+	if is_streaming:
+		camera.stop_recording()
+
 	blinking(leds[0], TIME_SHUTDOWN)
 	command = "/usr/bin/sudo /sbin/shutdown -h now"
-	import subprocess
+	
 	process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
 	output = process.communicate()[0]
 	print("stop")
 	
+GPIO.add_event_detect(tabs[1], GPIO.FALLING, callback=handle_stop, bouncetime=200)	
 	
 while True:
 	if GPIO.input(tabs[0]) == GPIO.LOW:
 		if is_streaming:
+			camera.stop_recording()
 			is_streaming = False
-			output.release()
-		is_capturing = True
+		if not is_capturing:	
+			is_capturing = True
+			camera.switch_mode(photo_config)
 		
-	if GPIO.input(tabs[1]) == GPIO.LOW:
+	if GPIO.input(tabs[2]) == GPIO.LOW:
 		if is_capturing:
 			is_capturing = False
-		elif is_streaming:
-			is_streaming = False
-			output.release()
+		if not is_streaming:
+			is_streaming = True	
+			start_streaming()	
 			
-		GPIO.output(leds[1], GPIO.LOW)
-			
-	#if GPIO.input(tabs[2]) == GPIO.LOW:
-	#	if not is_streaming:
-	#		is_streaming = starting = True
-	
 	if GPIO.input(tabs[3]) == GPIO.LOW:
 		shutdown()
 	
 	if is_capturing:
 		capturing()		
-	elif is_streaming:
-		if starting:
-			video_path = SAVE_FOLDER_VIDEO + "//" + str(time.strftime("%Y-%m-%d %H:%M:%S")) + ".avi"
-			output = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"MPEG"), 30, SIZE)
-			starting = False
-			GPIO.output(leds[1], GPIO.HIGH)
-			print("starting")
-		
-		frame = camera_capture.camera.capture_array()
-		output.write(frame)
-		print("Video capturing")
-	else:
+	elif not is_streaming:
 		blinking(leds[0], TIME_BLINK)
-

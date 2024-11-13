@@ -1,6 +1,7 @@
 import RPi.GPIO as GPIO
 import time
 
+
 led_1 = 23
 led_2 = 24 
   
