@@ -1,16 +1,13 @@
 from libcamera import Transform, controls
 from picamera2 import Picamera2
-from picamera2.encoders import H264Encoder, Quality
 import RPi.GPIO as GPIO
 import time
-import cv2
 
 TIME_CAPTURING = 0
 TIME_STEP = 3
 TIME_BLINK = 1
 TIME_SHUTDOWN = 5
-SAVE_FOLDER_IMG = '/home/Lincos/code/camera/imgs'
-SAVE_FOLDER_VIDEO = '/home/Lincos/code/camera/videos'
+SAVE_FOLDER_IMG = '/home/pi/code/camera/imgs/'
 SIZE = (1920, 1080)
 
 def get_config(camera, size, form):
@@ -35,16 +32,7 @@ def get_config(camera, size, form):
 	return camera_config
 
 camera = Picamera2()
-#photo_config = get_config(camera, 1, SIZE, "photo")
-video_config = get_config(camera, SIZE, "video")
-camera.configure(video_config)
-camera.start()
+photo_config = get_config(camera, SIZE, "photo")
+camera.configure(photo_config)
 
-video_path = SAVE_FOLDER_VIDEO + "//" + str(time.strftime("%Y-%m-%d %H:%M:%S")) + ".h264"
-
-encoder = H264Encoder(bitrate=12000000)
-
-camera.start_recording(encoder, video_path, quality=Quality.HIGH)
-time.sleep(10)
-camera.stop_recording()
-
+camera.start_and_capture_file(SAVE_FOLDER_IMG + "test.jpg")
